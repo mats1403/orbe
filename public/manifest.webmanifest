@@ -1,0 +1,11 @@
+{
+  "name": "Orbe — Seu segundo cérebro",
+  "short_name": "Orbe",
+  "description": "Um espaço livre para pensar, criar, guardar e conectar tudo o que importa.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f6f1",
+  "theme_color": "#f7f6f1",
+  "lang": "pt-BR",
+  "categories": ["productivity", "utilities"]
+}
