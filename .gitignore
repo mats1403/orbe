@@ -38,3 +38,9 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+
+# nested build artifacts
+**/node_modules/
+**/dist/
+dev.log
+dev.err

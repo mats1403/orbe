@@ -9,10 +9,11 @@ RUN npm run build
 FROM node:22-alpine
 ENV NODE_ENV=production
 WORKDIR /app
-RUN addgroup -S orbe && adduser -S orbe -G orbe
+RUN apk add --no-cache su-exec \
+  && addgroup -S orbe \
+  && adduser -S orbe -G orbe
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
-USER orbe
 EXPOSE 4000
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "mkdir -p /data/uploads && chown -R orbe:orbe /data/uploads && exec su-exec orbe node dist/index.js"]
