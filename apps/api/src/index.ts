@@ -72,7 +72,8 @@ const app = new Elysia()
   .get("/health", async () => {
     await pool.query("SELECT 1");
     return { status: "ok" };
-  });
+  })
+  .get("/", () => "Orbe API is running.");
 
 // Auth Routes
 const credentialsSchema = t.Object({
