@@ -89,7 +89,7 @@ app.post("/auth/register", { config: { rateLimit: { max: 8, timeWindow: "15 minu
   const input = credentials.parse(request.body);
   const hash = await argon2.hash(input.password, { type: argon2.argon2id, memoryCost: 19456, timeCost: 3, parallelism: 1 });
   try {
-    const result = await pool.query("INSERT INTO users(email, password_hash) VALUES($1,$2) RETURNING id,email", [input.email, hash]);
+    const result = await pool.query("INSERT INTO users(email, password_hash, display_name) VALUES($1,$2,split_part($1,'@',1)) RETURNING id,email,display_name,role", [input.email, hash]);
     await setSession(reply, result.rows[0].id);
     return reply.code(201).send({ user: result.rows[0] });
   } catch (error) {
@@ -100,16 +100,16 @@ app.post("/auth/register", { config: { rateLimit: { max: 8, timeWindow: "15 minu
 
 app.post("/auth/login", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
   const input = credentials.parse(request.body);
-  const result = await pool.query("SELECT id,email,password_hash FROM users WHERE email=$1", [input.email]);
+  const result = await pool.query("SELECT id,email,password_hash,display_name,role FROM users WHERE email=$1", [input.email]);
   const user = result.rows[0];
   if (!user || !(await argon2.verify(user.password_hash, input.password))) return reply.code(401).send({ message: "Credenciais inválidas." });
   await setSession(reply, user.id);
-  return { user: { id: user.id, email: user.email } };
+  return { user: { id: user.id, email: user.email, display_name: user.display_name, role: user.role } };
 });
 
 app.get("/auth/me", async (request) => {
   const userId = await auth(request);
-  const result = await pool.query("SELECT id,email FROM users WHERE id=$1", [userId]);
+  const result = await pool.query("SELECT id,email,display_name,role FROM users WHERE id=$1", [userId]);
   if (!result.rows[0]) throw Object.assign(new Error("Sessão inválida"), { statusCode: 401 });
   return { user: result.rows[0] };
 });

@@ -1,100 +1,73 @@
-# vinext-starter
+# Orbe - Seu Segundo Cérebro Digital
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+O **Orbe** é um sistema de organização pessoal e gestão de conhecimento pensado para funcionar como um segundo cérebro digital. Ele reúne notas visuais, Markdown, PDFs anotáveis, planilhas, desenhos em camadas e arquivos pessoais em um único ambiente.
 
-## Prerequisites
+Ele preserva os formatos originais, oferece edição especializada para cada conteúdo e combina armazenamento local com uma API segura.
 
-- Node.js `>=22.13.0`
+## 🌟 Principais Funcionalidades
 
-## Quick Start
+- **Editor Markdown Visual:** Edição visual ao vivo (estilo Obsidian) sem aprisionamento de formato.
+- **Anotador de PDF:** Leitura e anotação em PDFs com traços vetoriais em camadas separadas, preservando o documento original.
+- **Quadro de Desenho Livre:** Ferramentas de desenho vetorial (lápis, caneta, marca-texto) com suporte a camadas.
+- **Planilhas:** Edição nativa de arquivos Excel no navegador.
+- **Importação Universal:** Suporte para importação de Markdown, PDF, planilhas Excel, pacotes do Samsung Notes e arquivos genéricos.
 
+## 🛠 Tecnologias Utilizadas
+
+- **Frontend:** React 19, TypeScript, vinext, Vite, Tailwind CSS 4, Tiptap.
+- **Backend:** Node.js, Fastify, TypeScript, Zod, JWT/Argon2.
+- **Banco de Dados:** PostgreSQL.
+- **Outros:** PDF.js, pdf-lib, read-excel-file, JSZip.
+
+## 🚀 Como executar localmente
+
+### Pré-requisitos
+- Node.js >= 22.13
+- PostgreSQL (ou Docker)
+
+### 1. Dependências
 ```bash
 npm install
-npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+### 2. Variáveis de Ambiente
+Crie um arquivo `.env` na raiz do projeto baseado no `.env.example`:
+```bash
+cp .env.example .env
+```
+*(Certifique-se de preencher a URL do banco de dados e as outras configurações)*
 
-## Included Shape
+### 3. Executando os servidores
+O projeto é dividido em API e Interface. Você pode rodar os dois com:
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+**Backend (API):**
+```bash
+npm run dev:back
+# Disponível em http://localhost:4000
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+**Frontend (Interface):**
+```bash
+npm run dev:front
+# Disponível em http://localhost:3000
+```
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+Se preferir usar Docker (apenas para backend e banco):
+```bash
+docker compose up
+```
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+## 🌍 Estrutura de Deploy (Vercel, Render e Neon)
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+A infraestrutura foi preparada para o seguinte stack de produção:
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+1. **Neon (Banco de Dados):** Fornece o PostgreSQL e a URL de conexão (`DATABASE_URL`).
+2. **Render (Backend):** 
+   - Ao configurar o Web Service, use o **Root Directory** como `server`.
+   - **Build Command:** `npm install && npm run build`
+   - **Start Command:** `npm run start:prod`
+3. **Vercel (Frontend):** 
+   - Use o preset padrão de Vite/Next e aponte a variável `NEXT_PUBLIC_API_URL` para o link do Render.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+---
+*Para informações técnicas aprofundadas sobre o produto, roadmap e a arquitetura completa, consulte o arquivo [CONTEXTO_DO_PROJETO.md](./CONTEXTO_DO_PROJETO.md).*

@@ -30,6 +30,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -37,10 +38,30 @@ yarn-error.log*
 /dist/
 /.wrangler/
 /outputs/
+/output/
+/tmp/
 /work/
 
 # nested build artifacts
 **/node_modules/
 **/dist/
+tsconfig.tsbuildinfo
 dev.log
 dev.err
+
+# AI and Agents
+.gemini/
+.openai/
+.cursor/
+.cline/
+.aider/
+.roo/
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

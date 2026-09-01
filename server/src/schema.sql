@@ -4,8 +4,13 @@ CREATE TABLE IF NOT EXISTS users (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   email text NOT NULL UNIQUE,
   password_hash text NOT NULL,
+  display_name text NOT NULL DEFAULT '',
+  role text NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name text NOT NULL DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'user';
 
 CREATE TABLE IF NOT EXISTS pages (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

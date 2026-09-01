@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./editor-enhancements.css";
 
 export const metadata: Metadata = {
   title: "Orbe — Seu segundo cérebro",

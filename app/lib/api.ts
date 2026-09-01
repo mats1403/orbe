@@ -28,6 +28,7 @@ export const api = {
   updatePage: (id: string, input: { title?: string; content?: CloudPage["content"]; isFavorite?: boolean }) =>
     request<CloudPage>("/api/pages/" + id, { method: "PATCH", body: JSON.stringify(input) }),
   files: () => request<Array<{ id: string; original_name: string; mime_type: string; size_bytes: number; created_at: string }>>("/api/files"),
+  fileUrl: (id: string) => API_URL + "/api/files/" + encodeURIComponent(id),
   upload: async (file: File) => {
     const form = new FormData();
     form.append("file", file);
