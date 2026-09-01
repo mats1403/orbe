@@ -1,4 +1,5 @@
 import type { CloudPage, SessionUser } from "./types";
+import { localApi, isDesktop } from "./local-first";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -16,7 +17,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload as T;
 }
 
-export const api = {
+export const remoteApi = {
   health: () => request<{ status: string }>("/health"),
   me: () => request<{ user: SessionUser }>("/auth/me"),
   login: (email: string, password: string) => request<{ user: SessionUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
@@ -35,3 +36,14 @@ export const api = {
     return request<{ id: string; original_name: string; mime_type: string; size_bytes: number }>("/api/files", { method: "POST", body: form });
   },
 };
+
+// Proxy para direcionar as chamadas para o motor correto (Local-First no Desktop, Remote na Web)
+export const api = new Proxy(remoteApi, {
+  get(target, prop: keyof typeof remoteApi) {
+    if (isDesktop() && prop in localApi) {
+      // @ts-ignore
+      return localApi[prop];
+    }
+    return target[prop];
+  }
+});

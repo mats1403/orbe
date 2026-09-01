@@ -1,0 +1,28 @@
+{
+  "name": "@orbe/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "build": "bun build src/index.ts --target=bun --outfile=dist/index.js",
+    "start": "bun dist/index.js",
+    "start:prod": "bun dist/index.js",
+    "seed:local": "bun src/seed-local.ts"
+  },
+  "dependencies": {
+    "argon2": "^0.44.0",
+    "elysia": "latest",
+    "@elysiajs/cors": "latest",
+    "@elysiajs/cookie": "latest",
+    "jose": "^6.1.0",
+    "pg": "^8.16.3",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/pg": "^8.15.6",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

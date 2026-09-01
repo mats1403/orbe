@@ -70,4 +70,4 @@ A infraestrutura foi preparada para o seguinte stack de produção:
    - Use o preset padrão de Vite/Next e aponte a variável `NEXT_PUBLIC_API_URL` para o link do Render.
 
 ---
-*Para informações técnicas aprofundadas sobre o produto, roadmap e a arquitetura completa, consulte o arquivo [CONTEXTO_DO_PROJETO.md](./CONTEXTO_DO_PROJETO.md).*
+*Para informações técnicas aprofundadas sobre o produto, roadmap e a arquitetura completa, consulte a documentação na pasta [docs/](./docs).*
