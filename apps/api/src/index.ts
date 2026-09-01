@@ -1,7 +1,7 @@
 import { Elysia, t } from "elysia";
 import { cors } from "@elysiajs/cors";
 import { cookie } from "@elysiajs/cookie";
-import argon2 from "argon2";
+// Removed argon2 import
 import { SignJWT, jwtVerify } from "jose";
 import pg from "pg";
 import { z } from "zod";
@@ -85,7 +85,7 @@ app.group("/auth", (app) =>
     .post("/register", async ({ body, set, cookie: { orbe_session } }) => {
       const input = body;
       input.email = input.email.toLowerCase();
-      const hash = await argon2.hash(input.password, { type: argon2.argon2id, memoryCost: 19456, timeCost: 3, parallelism: 1 });
+      const hash = await Bun.password.hash(input.password, { algorithm: "argon2id" });
       try {
         const result = await pool.query("INSERT INTO users(email, password_hash, display_name) VALUES($1,$2,split_part($1,'@',1)) RETURNING id,email,display_name,role", [input.email, hash]);
         const user = result.rows[0];
@@ -112,7 +112,7 @@ app.group("/auth", (app) =>
       input.email = input.email.toLowerCase();
       const result = await pool.query("SELECT id,email,password_hash,display_name,role FROM users WHERE email=$1", [input.email]);
       const user = result.rows[0];
-      if (!user || !(await argon2.verify(user.password_hash, input.password))) {
+      if (!user || !(await Bun.password.verify(input.password, user.password_hash))) {
         set.status = 401;
         return { message: "Credenciais inválidas." };
       }
