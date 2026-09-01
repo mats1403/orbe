@@ -16,7 +16,7 @@ const env = z.object({
   JWT_SECRET: z.string().min(32),
   APP_ORIGIN: z.string().url().default("http://localhost:3000"),
   PORT: z.coerce.number().default(4000),
-  UPLOAD_DIR: z.string().default("/data/uploads"),
+  UPLOAD_DIR: z.string().default("./data/uploads"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_SSL: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
 }).parse(process.env);
