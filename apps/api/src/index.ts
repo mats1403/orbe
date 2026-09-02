@@ -3,7 +3,7 @@ import { cors } from "@elysiajs/cors";
 import { cookie } from "@elysiajs/cookie";
 // Removed argon2 import
 import { SignJWT, jwtVerify } from "jose";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, or } from "drizzle-orm";
 import pg from "pg";
 import { z } from "zod";
 import { mkdir, unlink } from "node:fs/promises";
@@ -48,7 +48,16 @@ async function tokenFor(userId: string) {
 }
 
 const app = new Elysia()
-  .use(cors({ origin: env.APP_ORIGIN, credentials: true, allowedHeaders: ["Content-Type", "Authorization"] }))
+  .use(cors({ 
+    origin: (request) => {
+      const origin = request.headers.get("origin");
+      if (!origin) return true;
+      if (origin.endsWith(".vercel.app") || origin === env.APP_ORIGIN) return true;
+      return false;
+    }, 
+    credentials: true, 
+    allowedHeaders: ["Content-Type", "Authorization"] 
+  }))
   .use(cookie())
   .derive(async ({ cookie: { orbe_session } }) => {
     if (!orbe_session?.value) return { userId: null };
@@ -77,8 +86,14 @@ const app = new Elysia()
   .get("/", () => "Orbe API is running.");
 
 // Auth Routes
-const credentialsSchema = t.Object({
+const registerSchema = t.Object({
   email: t.String({ format: "email", maxLength: 254 }),
+  username: t.String({ minLength: 3, maxLength: 64 }),
+  password: t.String({ minLength: 12, maxLength: 128 }),
+});
+
+const loginSchema = t.Object({
+  login: t.String({ minLength: 3, maxLength: 254 }),
   password: t.String({ minLength: 12, maxLength: 128 }),
 });
 
@@ -87,13 +102,15 @@ app.group("/auth", (app) =>
     .post("/register", async ({ body, set, cookie: { orbe_session } }) => {
       const input = body;
       input.email = input.email.toLowerCase();
+      input.username = input.username.toLowerCase();
       const hash = await Bun.password.hash(input.password, { algorithm: "argon2id" });
       try {
         const result = await db.insert(schema.users).values({
           email: input.email,
+          username: input.username,
           password_hash: hash,
-          display_name: input.email.split('@')[0],
-        }).returning({ id: schema.users.id, email: schema.users.email, display_name: schema.users.display_name, role: schema.users.role });
+          display_name: input.username,
+        }).returning({ id: schema.users.id, email: schema.users.email, username: schema.users.username, display_name: schema.users.display_name, role: schema.users.role });
         const user = result[0];
         orbe_session.set({
           value: await tokenFor(user.id),
@@ -108,15 +125,20 @@ app.group("/auth", (app) =>
       } catch (error) {
         if ((error as { code?: string }).code === "23505") {
           set.status = 409;
-          return { message: "Este e-mail já está em uso." };
+          return { message: "Este e-mail ou nome de usuário já está em uso." };
         }
         throw error;
       }
-    }, { body: credentialsSchema })
+    }, { body: registerSchema })
     .post("/login", async ({ body, set, cookie: { orbe_session } }) => {
       const input = body;
-      input.email = input.email.toLowerCase();
-      const users = await db.select().from(schema.users).where(eq(schema.users.email, input.email));
+      const searchLogin = input.login.toLowerCase();
+      const users = await db.select().from(schema.users).where(
+        or(
+          eq(schema.users.email, searchLogin),
+          eq(schema.users.username, searchLogin)
+        )
+      );
       const user = users[0];
       if (!user || !(await Bun.password.verify(input.password, user.password_hash))) {
         set.status = 401;
@@ -130,14 +152,14 @@ app.group("/auth", (app) =>
         path: "/",
         maxAge: 7 * 24 * 60 * 60,
       });
-      return { user: { id: user.id, email: user.email, display_name: user.display_name, role: user.role } };
-    }, { body: credentialsSchema })
+      return { user: { id: user.id, email: user.email, username: user.username, display_name: user.display_name, role: user.role } };
+    }, { body: loginSchema })
     .get("/me", async ({ userId, set }) => {
       if (!userId) {
         set.status = 401;
         return { message: "Não autenticado" };
       }
-      const users = await db.select({ id: schema.users.id, email: schema.users.email, display_name: schema.users.display_name, role: schema.users.role }).from(schema.users).where(eq(schema.users.id, userId));
+      const users = await db.select({ id: schema.users.id, email: schema.users.email, username: schema.users.username, display_name: schema.users.display_name, role: schema.users.role }).from(schema.users).where(eq(schema.users.id, userId));
       if (!users[0]) {
         set.status = 401;
         return { message: "Sessão inválida" };

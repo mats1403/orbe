@@ -8,6 +8,13 @@
       "when": 1788313920702,
       "tag": "0000_complex_calypso",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788316018802,
+      "tag": "0001_quiet_echo",
+      "breakpoints": true
     }
   ]
 }

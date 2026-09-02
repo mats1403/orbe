@@ -5,6 +5,7 @@ import {
   FileSpreadsheet, Grid2X2, HardDrive, Inbox, Link2, List, Lock, LogOut, Menu,
   MessageSquareText, MoreHorizontal, Network, PanelLeftClose, PenLine, Plus,
   Search, Settings, Share2, ShieldCheck, Sparkles, Star, Tag, Upload, UserRound, X,
+  Eye, EyeOff
 } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { EditorWorkspace } from "./components/EditorWorkspace";
@@ -352,15 +353,93 @@ export default function Home() {
 
 function AuthPanel({ onClose, onConnected }: { onClose: () => void; onConnected: (user: SessionUser) => void }) {
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [email, setEmail] = useState("");
+  const [loginStr, setLoginStr] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
   async function submit(event: React.FormEvent) {
     event.preventDefault(); setBusy(true); setError("");
-    try { const result = mode === "login" ? await api.login(email, password) : await api.register(email, password); onConnected(result.user); }
+    try { 
+      const result = mode === "login" 
+        ? await api.login(loginStr, password) 
+        : await api.register(loginStr, username, password); 
+      onConnected(result.user); 
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Não foi possível conectar."); }
     finally { setBusy(false); }
   }
-  return <div className="modal-layer auth-layer" onMouseDown={onClose}><form className="auth-panel" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}><button type="button" className="modal-close" onClick={onClose}><X size={19} /></button><span className="brand-mark">O</span><span className="modal-kicker">NUVEM PRIVADA ORBE</span><h2>{mode === "login" ? "Continue de qualquer dispositivo" : "Crie seu espaço sincronizado"}</h2><p>Seus dados continuam locais e ganham uma cópia protegida no PostgreSQL.</p><label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} required autoComplete="email" /></label><label>Senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} required minLength={12} autoComplete={mode === "login" ? "current-password" : "new-password"} /><small>Mínimo de 12 caracteres</small></label>{error && <div className="auth-error">{error}</div>}<button className="auth-submit" disabled={busy}>{busy ? "Conectando…" : mode === "login" ? "Entrar e sincronizar" : "Criar conta segura"}</button><button type="button" className="auth-switch" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); }}>{mode === "login" ? "Ainda não tenho conta" : "Já tenho uma conta"}</button><div className="privacy-note"><HardDrive size={15} /> O modo local continua disponível mesmo sem entrar.</div></form></div>;
+
+  return (
+    <div className="modal-layer auth-layer" onMouseDown={onClose}>
+      <form className="auth-panel" onSubmit={submit} onMouseDown={(event) => event.stopPropagation()}>
+        <button type="button" className="modal-close" onClick={onClose}><X size={19} /></button>
+        <span className="brand-mark">O</span>
+        <span className="modal-kicker">NUVEM PRIVADA ORBE</span>
+        <h2>{mode === "login" ? "Continue de qualquer dispositivo" : "Crie seu espaço sincronizado"}</h2>
+        <p>Seus dados continuam locais e ganham uma cópia protegida no PostgreSQL.</p>
+        
+        <label>
+          {mode === "login" ? "E-mail ou Username" : "E-mail"}
+          <input 
+            type={mode === "login" ? "text" : "email"} 
+            value={loginStr} 
+            onChange={(event) => setLoginStr(event.target.value)} 
+            required 
+            autoComplete={mode === "login" ? "username" : "email"} 
+          />
+        </label>
+
+        {mode === "register" && (
+          <label>
+            Nome de Usuário (Username)
+            <input 
+              type="text" 
+              value={username} 
+              onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))} 
+              required 
+              minLength={3}
+              maxLength={64}
+              placeholder="ex: mats123"
+            />
+          </label>
+        )}
+
+        <label>
+          Senha
+          <div className="input-with-icon" style={{ position: "relative", display: "flex", alignItems: "center" }}>
+            <input 
+              type={showPassword ? "text" : "password"} 
+              value={password} 
+              onChange={(event) => setPassword(event.target.value)} 
+              required 
+              minLength={12} 
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+              style={{ width: "100%", paddingRight: "32px" }}
+            />
+            <button 
+              type="button" 
+              onClick={() => setShowPassword(!showPassword)}
+              tabIndex={-1}
+              style={{ position: "absolute", right: "8px", background: "none", border: "none", cursor: "pointer", color: "var(--foreground-muted)", display: "flex", alignItems: "center" }}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          <small>Mínimo de 12 caracteres</small>
+        </label>
+
+        {error && <div className="auth-error">{error}</div>}
+        
+        <button className="auth-submit" disabled={busy}>
+          {busy ? "Conectando…" : mode === "login" ? "Entrar e sincronizar" : "Criar conta segura"}
+        </button>
+        <button type="button" className="auth-switch" onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(""); setPassword(""); }}>
+          {mode === "login" ? "Ainda não tenho conta" : "Já tenho uma conta"}
+        </button>
+      </form>
+    </div>
+  );
 }

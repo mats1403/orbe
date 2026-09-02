@@ -17,11 +17,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return payload as T;
 }
 
+export type SessionUser = { id: string; email: string; username: string; display_name: string; role: string };
+
 export const remoteApi = {
   health: () => request<{ status: string }>("/health"),
   me: () => request<{ user: SessionUser }>("/auth/me"),
-  login: (email: string, password: string) => request<{ user: SessionUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
-  register: (email: string, password: string) => request<{ user: SessionUser }>("/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
+  login: (loginStr: string, password: string) => request<{ user: SessionUser }>("/auth/login", { method: "POST", body: JSON.stringify({ login: loginStr, password }) }),
+  register: (email: string, username: string, password: string) => request<{ user: SessionUser }>("/auth/register", { method: "POST", body: JSON.stringify({ email, username, password }) }),
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   pages: () => request<CloudPage[]>("/api/pages"),
   createPage: (input: { title: string; icon?: string; content?: CloudPage["content"] }) =>

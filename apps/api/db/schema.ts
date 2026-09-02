@@ -5,6 +5,7 @@ export const workspaceSchema = pgSchema("workspace");
 
 export const users = accountsSchema.table("users", {
   id: uuid("id").primaryKey().defaultRandom(),
+  username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   password_hash: text("password_hash").notNull(),
   display_name: text("display_name").notNull(),
