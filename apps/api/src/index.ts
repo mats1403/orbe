@@ -3,6 +3,7 @@ import { cors } from "@elysiajs/cors";
 import { cookie } from "@elysiajs/cookie";
 // Removed argon2 import
 import { SignJWT, jwtVerify } from "jose";
+import { eq, and, desc } from "drizzle-orm";
 import pg from "pg";
 import { z } from "zod";
 import { mkdir, unlink } from "node:fs/promises";
@@ -21,6 +22,9 @@ const env = z.object({
   DATABASE_SSL: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
 }).parse(process.env);
 
+import { drizzle } from "drizzle-orm/node-postgres";
+import * as schema from "../db/schema";
+
 const pool = new pg.Pool({
   connectionString: env.DATABASE_URL,
   max: 20,
@@ -28,6 +32,8 @@ const pool = new pg.Pool({
   connectionTimeoutMillis: 5_000,
   ssl: env.DATABASE_SSL ? { rejectUnauthorized: true } : false,
 });
+export const db = drizzle(pool, { schema });
+
 const secret = new TextEncoder().encode(env.JWT_SECRET);
 const SESSION_COOKIE = "orbe_session";
 
@@ -41,23 +47,18 @@ async function tokenFor(userId: string) {
     .sign(secret);
 }
 
-// Elysia Auth Plugin
-const authPlugin = new Elysia()
+const app = new Elysia()
+  .use(cors({ origin: env.APP_ORIGIN, credentials: true, allowedHeaders: ["Content-Type", "Authorization"] }))
   .use(cookie())
   .derive(async ({ cookie: { orbe_session } }) => {
     if (!orbe_session?.value) return { userId: null };
     try {
-      const { payload } = await jwtVerify(orbe_session.value, secret, { algorithms: ["HS256"], audience: "orbe-web", issuer: "orbe-api" });
+      const { payload } = await jwtVerify(orbe_session.value as string, secret, { algorithms: ["HS256"], audience: "orbe-web", issuer: "orbe-api" });
       return { userId: payload.sub as string };
     } catch {
       return { userId: null };
     }
-  });
-
-const app = new Elysia()
-  .use(cors({ origin: env.APP_ORIGIN, credentials: true, allowedHeaders: ["Content-Type", "Authorization"] }))
-  .use(cookie())
-  .use(authPlugin)
+  })
   .onError(({ code, error, set }) => {
     if (code === 'VALIDATION') {
       set.status = 400;
@@ -88,8 +89,12 @@ app.group("/auth", (app) =>
       input.email = input.email.toLowerCase();
       const hash = await Bun.password.hash(input.password, { algorithm: "argon2id" });
       try {
-        const result = await pool.query("INSERT INTO users(email, password_hash, display_name) VALUES($1,$2,split_part($1,'@',1)) RETURNING id,email,display_name,role", [input.email, hash]);
-        const user = result.rows[0];
+        const result = await db.insert(schema.users).values({
+          email: input.email,
+          password_hash: hash,
+          display_name: input.email.split('@')[0],
+        }).returning({ id: schema.users.id, email: schema.users.email, display_name: schema.users.display_name, role: schema.users.role });
+        const user = result[0];
         orbe_session.set({
           value: await tokenFor(user.id),
           httpOnly: true,
@@ -111,8 +116,8 @@ app.group("/auth", (app) =>
     .post("/login", async ({ body, set, cookie: { orbe_session } }) => {
       const input = body;
       input.email = input.email.toLowerCase();
-      const result = await pool.query("SELECT id,email,password_hash,display_name,role FROM users WHERE email=$1", [input.email]);
-      const user = result.rows[0];
+      const users = await db.select().from(schema.users).where(eq(schema.users.email, input.email));
+      const user = users[0];
       if (!user || !(await Bun.password.verify(input.password, user.password_hash))) {
         set.status = 401;
         return { message: "Credenciais inválidas." };
@@ -132,12 +137,12 @@ app.group("/auth", (app) =>
         set.status = 401;
         return { message: "Não autenticado" };
       }
-      const result = await pool.query("SELECT id,email,display_name,role FROM users WHERE id=$1", [userId]);
-      if (!result.rows[0]) {
+      const users = await db.select({ id: schema.users.id, email: schema.users.email, display_name: schema.users.display_name, role: schema.users.role }).from(schema.users).where(eq(schema.users.id, userId));
+      if (!users[0]) {
         set.status = 401;
         return { message: "Sessão inválida" };
       }
-      return { user: result.rows[0] };
+      return { user: users[0] };
     })
     .post("/logout", async ({ cookie: { orbe_session } }) => {
       orbe_session.remove();
@@ -155,45 +160,86 @@ app.group("/api", (app) =>
       }
     })
     .get("/pages", async ({ userId }) => {
-      const result = await pool.query("SELECT id,parent_id,title,icon,content,is_favorite,updated_at FROM pages WHERE owner_id=$1 ORDER BY updated_at DESC", [userId]);
-      return result.rows;
+      return await db.select({
+        id: schema.pages.id,
+        parent_id: schema.pages.parent_id,
+        title: schema.pages.title,
+        icon: schema.pages.icon,
+        content: schema.pages.content,
+        is_favorite: schema.pages.is_favorite,
+        updated_at: schema.pages.updated_at,
+      }).from(schema.pages).where(eq(schema.pages.owner_id, userId)).orderBy(desc(schema.pages.updated_at));
     })
     .post("/pages", async ({ body, userId, set }) => {
       const input = body as any;
-      const result = await pool.query(
-        "INSERT INTO pages(owner_id,parent_id,title,icon,content) VALUES($1,$2,$3,$4,$5) RETURNING id,parent_id,title,icon,content,is_favorite,updated_at",
-        [userId, input.parentId ?? null, input.title ?? "Página sem título", input.icon ?? null, JSON.stringify(input.content ?? [])]
-      );
+      const result = await db.insert(schema.pages).values({
+        owner_id: userId,
+        parent_id: input.parentId ?? null,
+        title: input.title ?? "Página sem título",
+        icon: input.icon ?? null,
+        content: JSON.stringify(input.content ?? []),
+      }).returning({
+        id: schema.pages.id,
+        parent_id: schema.pages.parent_id,
+        title: schema.pages.title,
+        icon: schema.pages.icon,
+        content: schema.pages.content,
+        is_favorite: schema.pages.is_favorite,
+        updated_at: schema.pages.updated_at,
+      });
       set.status = 201;
-      return result.rows[0];
+      return result[0];
     })
     .patch("/pages/:id", async ({ params: { id }, body, userId, set }) => {
       const input = body as any;
-      const result = await pool.query(
-        "UPDATE pages SET title=COALESCE($1,title),content=COALESCE($2,content),is_favorite=COALESCE($3,is_favorite),updated_at=now() WHERE id=$4 AND owner_id=$5 RETURNING id,parent_id,title,icon,content,is_favorite,updated_at",
-        [input.title ?? null, input.content ? JSON.stringify(input.content) : null, input.isFavorite ?? null, id, userId]
-      );
-      if (!result.rowCount) {
+      const updates: any = { updated_at: new Date() };
+      if (input.title !== undefined) updates.title = input.title;
+      if (input.content !== undefined) updates.content = JSON.stringify(input.content);
+      if (input.isFavorite !== undefined) updates.is_favorite = input.isFavorite;
+
+      const result = await db.update(schema.pages)
+        .set(updates)
+        .where(and(eq(schema.pages.id, id), eq(schema.pages.owner_id, userId)))
+        .returning({
+          id: schema.pages.id,
+          parent_id: schema.pages.parent_id,
+          title: schema.pages.title,
+          icon: schema.pages.icon,
+          content: schema.pages.content,
+          is_favorite: schema.pages.is_favorite,
+          updated_at: schema.pages.updated_at,
+        });
+      
+      if (!result.length) {
         set.status = 404;
         return { message: "Página não encontrada." };
       }
-      return result.rows[0];
+      return result[0];
     })
     .delete("/pages/:id", async ({ params: { id }, userId, set }) => {
-      const result = await pool.query("DELETE FROM pages WHERE id=$1 AND owner_id=$2", [id, userId]);
-      if (!result.rowCount) {
+      const result = await db.delete(schema.pages).where(and(eq(schema.pages.id, id), eq(schema.pages.owner_id, userId))).returning({ id: schema.pages.id });
+      if (!result.length) {
         set.status = 404;
         return { message: "Página não encontrada." };
       }
       set.status = 204;
     })
     .get("/files", async ({ userId }) => {
-      const result = await pool.query("SELECT id,original_name,mime_type,size_bytes,created_at FROM files WHERE owner_id=$1 ORDER BY created_at DESC", [userId]);
-      return result.rows;
+      return await db.select({
+        id: schema.files.id,
+        original_name: schema.files.original_name,
+        mime_type: schema.files.mime_type,
+        size_bytes: schema.files.size_bytes,
+        created_at: schema.files.created_at,
+      }).from(schema.files).where(eq(schema.files.owner_id, userId)).orderBy(desc(schema.files.created_at));
     })
     .get("/files/:id", async ({ params: { id }, userId, set }) => {
-      const result = await pool.query("SELECT original_name,storage_name,mime_type FROM files WHERE id=$1 AND owner_id=$2", [id, userId]);
-      const file = result.rows[0];
+      const files = await db.select({
+        original_name: schema.files.original_name,
+        storage_name: schema.files.storage_name,
+        mime_type: schema.files.mime_type,
+      }).from(schema.files).where(and(eq(schema.files.id, id), eq(schema.files.owner_id, userId)));
+      const file = files[0];
       if (!file) {
         set.status = 404;
         return { message: "Arquivo não encontrado." };
