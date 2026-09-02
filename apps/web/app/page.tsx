@@ -14,39 +14,7 @@ import type { CloudPage, EditorKind, OrbeDocument, SecurityConfig, SessionUser }
 
 type PageItem = { id: string; title: string; icon: string; group: "favorites" | "private" | "shared"; preview: string; updated: string };
 
-const initialPages: PageItem[] = [
-  { id: "home", title: "Meu segundo cérebro", icon: "✦", group: "favorites", preview: "Sua central de ideias, arquivos e projetos.", updated: "agora" },
-  { id: "projects", title: "Projetos em andamento", icon: "◫", group: "favorites", preview: "3 projetos ativos e 8 próximas ações", updated: "12 min" },
-  { id: "journal", title: "Diário de bordo", icon: "☀", group: "private", preview: "Uma nota por dia, sem pressão.", updated: "hoje" },
-  { id: "research", title: "Pesquisa & referências", icon: "◎", group: "private", preview: "Leituras, destaques e conexões", updated: "ontem" },
-  { id: "finances", title: "Planejamento financeiro", icon: "↗", group: "private", preview: "Planilhas e decisões em um só lugar", updated: "2 dias" },
-  { id: "team", title: "Espaço da equipe", icon: "♧", group: "shared", preview: "Compartilhado com 4 pessoas", updated: "5 min" },
-];
 
-const seedDocuments: OrbeDocument[] = [
-  {
-    id: "secure-demo",
-    name: "Cofre Pessoal.sec",
-    kind: "secure",
-    mimeType: "text/markdown",
-    size: "1,2 KB",
-    accent: "gold",
-    security: {
-      isLocked: true,
-      lockType: "pin",
-      salt: "aPeG6SppTDuFJq86MsqwQA==",
-      iv: "wXAIJaWhfL0s7guu",
-      encryptedPayload: "TLJRcLbdenr249fHgsokffw09nwX1KE938SovNoef50JXAwjUF0XMW7rhQhF211fyO/QN+gBMx/iJltpuEg/qrAzjl+n9f2hre7BKT4GDP6Bu7iOv+LF9h/4wmIqZTJkdbPVns080ZoCbdM/Gs7KXoUt+P1C0JJwGH0EicpRXtPYk2AbkkvJV9u1t6cN+aW4IdtgtJO8/58ir6LJWFNf5X0fLB4t8zPqlQJRdPtn5uj/aWnwQQq0WtiFEWpoNWdRddjie4xePGr27mJPxQ1PuIhosqR8TyInH152lGA1wx09V2FPlXDLG0NghFEGnhDTyjMG/TbOa6+A6BQBT6CVFS6MH1+PmG5PsrMmNWfN2EQjVz5xMhszOGLaTPcjnpyMI9GZ+E1T8KPjdVFYrT5AHbohRv+rdT+H9WrQpBCzdQ7tOTl/Wstlr9srw1CxWCKRDULdbws9d4ySgQYIFh2WrzcpI+OATRY=",
-      hash: "w8OQu6BsN/71kK688Gd3VzqdAHAZianqj/DdFJynO/4=",
-      hint: "PIN padrão de teste: 1234",
-      autoLockOnClose: true,
-    },
-  },
-  { id: "markdown-welcome", name: "Manifesto do Orbe.md", kind: "markdown", mimeType: "text/markdown", size: "4 KB", accent: "lilac", content: "# Bem-vindo ao Orbe\n\nSeu espaço deve se adaptar ao seu pensamento — e não o contrário.\n\n## Hoje\n\n- [ ] Capture uma ideia\n- [ ] Conecte uma referência\n- [ ] Faça um desenho livre\n\n> Tudo continua seu, inclusive quando a internet acaba." },
-  { id: "sheet-demo", name: "Planejamento 2026.xlsx", kind: "spreadsheet", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", size: "1,7 MB", accent: "green", sheet: [["Projeto", "Responsável", "Status", "Progresso"], ["Orbe Mobile", "Matheus", "Em andamento", "65%"], ["Importadores", "Equipe", "Planejado", "20%"], ["Sincronização", "Backend", "Em andamento", "48%"]] },
-  { id: "pdf-demo", name: "Pesquisa de mercado.pdf", kind: "pdf", mimeType: "application/pdf", size: "8,1 MB", accent: "coral" },
-  { id: "samsung-demo", name: "Notas importadas.sdocx", kind: "samsung", mimeType: "application/octet-stream", size: "36 notas", accent: "blue", content: "Ideias recuperadas do Samsung Notes\n\n• Levar o modo local-first até o mobile\n• Criar ligações visuais entre páginas\n• Preservar sempre o arquivo original" },
-];
 
 function formatBytes(bytes: number) {
   if (!bytes) return "0 KB";
@@ -81,9 +49,9 @@ function SideGroup({ title, children }: { title: string; children: React.ReactNo
 }
 
 export default function Home() {
-  const [pages, setPages] = useState(initialPages);
+  const [pages, setPages] = useState<PageItem[]>([]);
   const [activePage, setActivePage] = useState("home");
-  const [documents, setDocuments] = useState(seedDocuments);
+  const [documents, setDocuments] = useState<OrbeDocument[]>([]);
   const [activeDocument, setActiveDocument] = useState<OrbeDocument | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -92,7 +60,7 @@ export default function Home() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [createSecureOpen, setCreateSecureOpen] = useState(false);
-  const [session, setSession] = useState<SessionUser | null>(null);
+  const [session, setSession] = useState<SessionUser | null | undefined>(undefined);
   const [syncMode, setSyncMode] = useState<"local" | "cloud">("local");
   const [syncStatus, setSyncStatus] = useState<"saved" | "saving" | "offline" | "error">("saved");
   const [cloudPageId, setCloudPageId] = useState<string | null>(null);
@@ -103,13 +71,7 @@ export default function Home() {
   const saveTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    const storedNote = window.localStorage.getItem("orbe-note");
-    const storedDocuments = window.localStorage.getItem("orbe-documents");
-    if (storedNote) setNote(storedNote);
-    if (storedDocuments) {
-      try { setDocuments(JSON.parse(storedDocuments)); } catch { /* preserve defaults */ }
-    }
-    api.me().then(({ user }) => { setSession(user); setSyncMode("cloud"); }).catch(() => undefined);
+    api.me().then(({ user }) => { setSession(user); setSyncMode("cloud"); }).catch(() => setSession(null));
     const shortcut = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setSearchOpen(true); }
       if (event.key === "Escape") { setSearchOpen(false); setUploadOpen(false); setAuthOpen(false); setCreateSecureOpen(false); }
@@ -117,6 +79,33 @@ export default function Home() {
     window.addEventListener("keydown", shortcut);
     return () => window.removeEventListener("keydown", shortcut);
   }, []);
+
+  useEffect(() => {
+    if (session) {
+      api.pages().then(res => {
+        setPages(res.map(p => ({
+          id: p.id,
+          title: p.title || "Sem título",
+          icon: p.icon || "📄",
+          group: p.is_favorite ? "favorites" : "private",
+          preview: "Página salva na nuvem.",
+          updated: new Date(p.updated_at).toLocaleDateString()
+        })));
+        if (res.length > 0) setActivePage(res[0].id);
+      }).catch(console.error);
+
+      api.files().then(res => {
+        setDocuments(res.map(f => ({
+          id: f.id,
+          name: f.original_name,
+          kind: detectKind(new File([], f.original_name)),
+          mimeType: f.mime_type,
+          size: formatBytes(f.size_bytes),
+          accent: accentFor(detectKind(new File([], f.original_name))) || "blue"
+        })));
+      }).catch(console.error);
+    }
+  }, [session]);
 
   useEffect(() => {
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
@@ -246,9 +235,12 @@ export default function Home() {
 
   if (activeDocument) return <EditorWorkspace document={activeDocument} onClose={() => setActiveDocument(null)} onSave={saveDocument} />;
 
+  if (session === undefined) return <main className="app-shell" style={{ alignItems: "center", justifyContent: "center" }}><div style={{ color: "var(--foreground-muted)" }}>Carregando sessão...</div></main>;
+  if (session === null) return <main className="app-shell" style={{ alignItems: "center", justifyContent: "center", background: "var(--background-secondary)" }}><AuthPanel onClose={() => {}} onConnected={connected} /></main>;
+
   return <main className="app-shell">
     <aside className={"sidebar " + (!sidebarOpen ? "collapsed " : "") + (mobileOpen ? "mobile-open" : "")}>
-      <div className="workspace-head"><button className="brand" onClick={() => openPage(initialPages[0])}><span className="brand-mark">O</span><span className="brand-copy"><strong>Orbe</strong><small>{session ? session.email : "Espaço pessoal"}</small></span></button><button className="icon-button desktop-only" onClick={() => setSidebarOpen(false)}><PanelLeftClose size={18} /></button><button className="icon-button mobile-close" onClick={() => setMobileOpen(false)}><X size={19} /></button></div>
+      <div className="workspace-head"><button className="brand" onClick={() => pages[0] && openPage(pages[0])}><span className="brand-mark">O</span><span className="brand-copy"><strong>Orbe</strong><small>{session ? session.email : "Espaço pessoal"}</small></span></button><button className="icon-button desktop-only" onClick={() => setSidebarOpen(false)}><PanelLeftClose size={18} /></button><button className="icon-button mobile-close" onClick={() => setMobileOpen(false)}><X size={19} /></button></div>
       <button className="search-button" onClick={() => setSearchOpen(true)}><Search size={16} /><span>Buscar em tudo</span><kbd>⌘ K</kbd></button>
       <nav className="primary-nav"><button className="nav-row active"><Inbox size={17} /><span>Início</span></button><button className="nav-row"><BookOpen size={17} /><span>Hoje</span><small>4</small></button><button className="nav-row"><Network size={17} /><span>Conexões</span></button><button className="nav-row"><Archive size={17} /><span>Todos os arquivos</span><small>{documents.length}</small></button></nav>
       <div className="page-tree">{(["favorites", "private", "shared"] as const).map((group) => <SideGroup key={group} title={{ favorites: "FAVORITOS", private: "PRIVADO", shared: "COMPARTILHADO" }[group]}>{pages.filter((page) => page.group === group).map((page) => <button className={"page-row " + (activePage === page.id ? "selected" : "")} key={page.id} onClick={() => openPage(page)}><span className="page-emoji">{page.icon}</span><span>{page.title}</span>{group === "shared" && <span className="avatar-mini">M</span>}</button>)}{group === "private" && <button className="page-row muted-row" onClick={addPage}><Plus size={15} /><span>Nova página</span></button>}</SideGroup>)}</div>
