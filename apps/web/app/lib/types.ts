@@ -22,7 +22,9 @@ export type OrbeDocument = {
   kind: EditorKind;
   mimeType: string;
   size: string;
+  sizeBytes?: number;
   accent: string;
+  updatedAt?: string;
   content?: string;
   sheet?: (string | number | boolean | null)[][];
   annotations?: Stroke[];

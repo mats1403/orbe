@@ -13,7 +13,7 @@ import { SecureSetupModal } from "./components/SecureSetupModal";
 import { api } from "./lib/api";
 import type { CloudPage, EditorKind, OrbeDocument, SecurityConfig, SessionUser } from "./lib/types";
 
-type PageItem = { id: string; title: string; icon: string; group: "favorites" | "private" | "shared"; preview: string; updated: string };
+type PageItem = { id: string; title: string; icon: string; group: "favorites" | "private" | "shared"; preview: string; updated: string; parentId?: string | null; isOpen?: boolean };
 
 
 
@@ -90,9 +90,11 @@ export default function Home() {
           icon: p.icon || "📄",
           group: p.is_favorite ? "favorites" : "private",
           preview: "Página salva na nuvem.",
-          updated: new Date(p.updated_at).toLocaleDateString()
+          updated: new Date(p.updated_at).toLocaleDateString(),
+          parentId: p.parent_id,
+          isOpen: false
         })));
-        if (res.length > 0) setActivePage(res[0].id);
+        if (res.length > 0 && activePage === "home") setActivePage(res[0].id);
       }).catch(console.error);
 
       api.files().then(res => {
@@ -102,6 +104,8 @@ export default function Home() {
           kind: detectKind(new File([], f.original_name)),
           mimeType: f.mime_type,
           size: formatBytes(f.size_bytes),
+          sizeBytes: f.size_bytes,
+          updatedAt: f.created_at,
           accent: accentFor(detectKind(new File([], f.original_name))) || "blue"
         })));
       }).catch(console.error);
@@ -149,6 +153,14 @@ export default function Home() {
   }, [title, note, documents, syncMode, session, cloudPageId]);
 
   const filteredPages = useMemo(() => pages.filter((page) => (page.title + " " + page.preview).toLowerCase().includes(search.toLowerCase())), [pages, search]);
+
+  const storageUsedBytes = useMemo(() => documents.reduce((acc, doc) => acc + (doc.sizeBytes || 0), 0), [documents]);
+  const todayCount = useMemo(() => {
+    const today = new Date().toLocaleDateString();
+    return pages.filter(p => p.updated === today).length + documents.filter(d => d.updatedAt && new Date(d.updatedAt).toLocaleDateString() === today).length;
+  }, [pages, documents]);
+
+  function togglePage(id: string) { setPages(current => current.map(p => p.id === id ? { ...p, isOpen: !p.isOpen } : p)); }
 
   function openPage(page: PageItem) { setActivePage(page.id); setTitle(page.title); setMobileOpen(false); }
   function addPage() {
@@ -243,9 +255,39 @@ export default function Home() {
     <aside className={"sidebar " + (!sidebarOpen ? "collapsed " : "") + (mobileOpen ? "mobile-open" : "")}>
       <div className="workspace-head"><button className="brand" onClick={() => pages[0] && openPage(pages[0])}><span className="brand-mark">O</span><span className="brand-copy"><strong>Orbe</strong><small>{session ? session.email : "Espaço pessoal"}</small></span></button><button className="icon-button desktop-only" onClick={() => setSidebarOpen(false)}><PanelLeftClose size={18} /></button><button className="icon-button mobile-close" onClick={() => setMobileOpen(false)}><X size={19} /></button></div>
       <button className="search-button" onClick={() => setSearchOpen(true)}><Search size={16} /><span>Buscar em tudo</span><kbd>⌘ K</kbd></button>
-      <nav className="primary-nav"><button className="nav-row active"><Inbox size={17} /><span>Início</span></button><button className="nav-row"><BookOpen size={17} /><span>Hoje</span><small>4</small></button><button className="nav-row"><Network size={17} /><span>Conexões</span></button><button className="nav-row"><Archive size={17} /><span>Todos os arquivos</span><small>{documents.length}</small></button></nav>
-      <div className="page-tree">{(["favorites", "private", "shared"] as const).map((group) => <SideGroup key={group} title={{ favorites: "FAVORITOS", private: "PRIVADO", shared: "COMPARTILHADO" }[group]}>{pages.filter((page) => page.group === group).map((page) => <button className={"page-row " + (activePage === page.id ? "selected" : "")} key={page.id} onClick={() => openPage(page)}><span className="page-emoji">{page.icon}</span><span>{page.title}</span>{group === "shared" && <span className="avatar-mini">M</span>}</button>)}{group === "private" && <button className="page-row muted-row" onClick={addPage}><Plus size={15} /><span>Nova página</span></button>}</SideGroup>)}</div>
-      <div className="storage-card"><div className="storage-top"><span><HardDrive size={15} /> Armazenamento</span><strong>{syncMode === "cloud" ? "Nuvem ativa" : "2,8 GB"}</strong></div><div className="storage-track"><span /></div><small>{syncMode === "cloud" ? "cópia local + PostgreSQL" : "de 10 GB usados neste dispositivo"}</small></div>
+      <nav className="primary-nav">
+        <button className={`nav-row ${activePage === "home" ? "active" : ""}`} onClick={() => { setActivePage("home"); setMobileOpen(false); setTitle("Meu segundo cérebro"); }}><Inbox size={17} /><span>Início</span></button>
+        <button className={`nav-row ${activePage === "today" ? "active" : ""}`} onClick={() => { setActivePage("today"); setMobileOpen(false); setTitle("Hoje"); }}><BookOpen size={17} /><span>Hoje</span><small>{todayCount || ""}</small></button>
+        <button className={`nav-row ${activePage === "connections" ? "active" : ""}`} onClick={() => { setActivePage("connections"); setMobileOpen(false); setTitle("Conexões"); }}><Network size={17} /><span>Conexões</span></button>
+        <button className={`nav-row ${activePage === "all_files" ? "active" : ""}`} onClick={() => { setActivePage("all_files"); setMobileOpen(false); setTitle("Todos os arquivos"); }}><Archive size={17} /><span>Todos os arquivos</span><small>{documents.length}</small></button>
+      </nav>
+      <div className="page-tree">{(["favorites", "private", "shared"] as const).map((group) => <SideGroup key={group} title={{ favorites: "FAVORITOS", private: "PRIVADO", shared: "COMPARTILHADO" }[group]}>
+        {function renderTree(parentId: string | null = null, depth = 0) {
+          const nodes = pages.filter(p => (p.parentId || null) === parentId && p.group === group);
+          return nodes.map(page => {
+            const hasChildren = pages.some(p => p.parentId === page.id && p.group === group);
+            return (
+              <div key={page.id}>
+                <div style={{ display: "flex", alignItems: "center", paddingLeft: depth * 12 }}>
+                  {hasChildren ? (
+                    <button className="icon-button" style={{ padding: 2, marginRight: 4, width: 20, height: 20 }} onClick={(e) => { e.stopPropagation(); togglePage(page.id); }}>
+                      {page.isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    </button>
+                  ) : (
+                    <span style={{ width: 24 }} />
+                  )}
+                  <button style={{ flex: 1 }} className={"page-row " + (activePage === page.id ? "selected" : "")} onClick={() => openPage(page)}>
+                    <span className="page-emoji">{page.icon}</span><span>{page.title}</span>{group === "shared" && <span className="avatar-mini">M</span>}
+                  </button>
+                </div>
+                {page.isOpen && hasChildren && renderTree(page.id, depth + 1)}
+              </div>
+            );
+          });
+        }()}
+        {group === "private" && <button className="page-row muted-row" onClick={addPage} style={{ marginLeft: 24 }}><Plus size={15} /><span>Nova página</span></button>}
+      </SideGroup>)}</div>
+      <div className="storage-card"><div className="storage-top"><span><HardDrive size={15} /> Armazenamento</span><strong>{syncMode === "cloud" ? "Nuvem ativa" : formatBytes(storageUsedBytes)}</strong></div><div className="storage-track"><span style={{ width: Math.min(100, (storageUsedBytes / (10 * 1024 * 1024 * 1024)) * 100) + '%' }} /></div><small>{syncMode === "cloud" ? "cópia local + PostgreSQL" : "usados neste dispositivo"}</small></div>
       <div className="sidebar-footer"><button className="nav-row"><Settings size={17} /><span>Configurações</span></button>{session ? <button className="profile-button" onClick={logout}><span className="avatar">{session.email.slice(0, 2).toUpperCase()}</span><span><strong>{session.email}</strong><small>Sincronização ativa</small></span><LogOut size={17} /></button> : <button className="profile-button" onClick={() => setAuthOpen(true)}><span className="avatar"><UserRound size={14} /></span><span><strong>Conectar à nuvem</strong><small>Entrar ou criar conta</small></span><ChevronRight size={17} /></button>}</div>
     </aside>
 
@@ -262,76 +304,99 @@ export default function Home() {
         <div className="page-toolbar"><button><Star size={15} /> Favoritar</button><button><Link2 size={15} /> Copiar link</button><button><MoreHorizontal size={16} /></button></div>
         <div className="page-icon">✦</div><input className="page-title" value={title} onChange={(event) => setTitle(event.target.value)} /><textarea className="page-intro" value={note} onChange={(event) => setNote(event.target.value)} rows={2} />
         
-        <div className="editor-launcher">
-          <div>
-            <span className="eyebrow">EDITORES UNIVERSAIS</span>
-            <h2>Abra, transforme e continue criando</h2>
-            <p>O original é preservado. Suas mudanças vivem em camadas editáveis, sincronizáveis e seguras.</p>
-          </div>
-          <div className="editor-launch-buttons">
-            <button onClick={() => newDocument("markdown")}>
-              <span className="action-icon lilac"><File size={18} /></span>Markdown
-            </button>
-            <button onClick={() => newDocument("spreadsheet")}>
-              <span className="action-icon green"><FileSpreadsheet size={18} /></span>Planilha
-            </button>
-            <button onClick={() => newDocument("drawing")}>
-              <span className="action-icon coral"><PenLine size={18} /></span>Quadro livre
-            </button>
-            <button onClick={() => setCreateSecureOpen(true)} className="secure-launch-btn">
-              <span className="action-icon gold"><Lock size={18} /></span>Nota Segura
-            </button>
-          </div>
-        </div>
-
-        <div className="quick-actions">
-          <button onClick={() => setCreateSecureOpen(true)}>
-            <span className="action-icon gold"><ShieldCheck size={20} /></span>
-            <span><strong>Criar Nota Segura</strong><small>Cofre protegido por PIN ou senha</small></span>
-          </button>
-          <button onClick={() => fileInput.current?.click()}>
-            <span className="action-icon mint"><Upload size={19} /></span>
-            <span><strong>Importar qualquer arquivo</strong><small>PDF, Office, Markdown ou Samsung Notes</small></span>
-          </button>
-          <button onClick={() => newDocument("drawing")}>
-            <span className="action-icon violet"><PenLine size={19} /></span>
-            <span><strong>Desenhar livremente</strong><small>Caneta, toque ou mouse</small></span>
-          </button>
-          <button onClick={addPage}>
-            <span className="action-icon amber"><Plus size={20} /></span>
-            <span><strong>Criar uma página</strong><small>Texto, lista ou banco de dados</small></span>
-          </button>
-        </div>
-
-        <section className="section-block"><div className="section-heading"><div><h2>Seus documentos</h2><p>Clique para abrir no editor adequado</p></div><div className="view-controls"><button className={view === "grid" ? "active" : ""} onClick={() => setView("grid")}><Grid2X2 size={16} /></button><button className={view === "list" ? "active" : ""} onClick={() => setView("list")}><List size={17} /></button></div></div>
-          <div className={"recent-grid document-grid " + (view === "list" ? "list-view" : "")}>{documents.slice(0, 6).map((document, index) => <button className={`recent-card ${document.kind === "secure" ? "secure-card" : ""}`} key={document.id} onClick={() => setActiveDocument(document)}>
-            <div className={"card-art art-" + ((index % 3) + 1)}>
-              <span>
-                {document.kind === "spreadsheet" ? <FileSpreadsheet size={17} /> : document.kind === "drawing" ? <PenLine size={17} /> : document.kind === "secure" ? <Lock size={17} /> : <File size={17} />}
-              </span>
-              <div className="art-lines"><i /><i /><i /></div>
-              {document.kind === "secure" && <span className="card-lock-badge">{document.security?.isLocked ? <Lock size={12} /> : <ShieldCheck size={12} />}</span>}
+        {activePage === "home" && (
+          <>
+            <div className="editor-launcher">
+              <div>
+                <span className="eyebrow">EDITORES UNIVERSAIS</span>
+                <h2>Abra, transforme e continue criando</h2>
+                <p>O original é preservado. Suas mudanças vivem em camadas editáveis, sincronizáveis e seguras.</p>
+              </div>
+              <div className="editor-launch-buttons">
+                <button onClick={() => newDocument("markdown")}>
+                  <span className="action-icon lilac"><File size={18} /></span>Markdown
+                </button>
+                <button onClick={() => newDocument("spreadsheet")}>
+                  <span className="action-icon green"><FileSpreadsheet size={18} /></span>Planilha
+                </button>
+                <button onClick={() => newDocument("drawing")}>
+                  <span className="action-icon coral"><PenLine size={18} /></span>Quadro livre
+                </button>
+                <button onClick={() => setCreateSecureOpen(true)} className="secure-launch-btn">
+                  <span className="action-icon gold"><Lock size={18} /></span>Nota Segura
+                </button>
+              </div>
             </div>
-            <div className="card-copy">
-              <strong>{document.name}</strong>
-              <p>
-                {document.kind === "secure"
-                  ? (document.security?.isLocked ? "🔒 Protegida com " + (document.security.lockType === "pin" ? "PIN" : "Senha") : "🔓 Desbloqueada nesta sessão")
-                  : document.kind === "pdf"
-                  ? "Anotar sem alterar o original"
-                  : document.kind === "spreadsheet"
-                  ? "Células editáveis e exportação .xlsx"
-                  : document.kind === "samsung"
-                  ? "Conteúdo recuperado e editável"
-                  : "Conteúdo livre e conectado"}
-              </p>
-              <small>{document.cloudId ? "Na nuvem" : "Neste dispositivo"} · {document.size}</small>
-            </div>
-            <MoreHorizontal className="card-more" size={17} />
-          </button>)}</div>
-        </section>
 
-        <section className="section-block"><div className="section-heading"><div><h2>Biblioteca</h2><p>Tudo cabe aqui, sem se prender ao formato</p></div><button className="text-button" onClick={() => setUploadOpen(true)}>Importar <ChevronRight size={15} /></button></div><div className="file-list">{documents.slice(0, 6).map((item) => <button className="file-row" key={item.id} onClick={() => setActiveDocument(item)}><span className={"file-icon " + item.accent}>{item.kind === "spreadsheet" ? <FileSpreadsheet size={19} /> : item.kind === "drawing" ? <PenLine size={19} /> : item.kind === "secure" ? <Lock size={19} /> : <File size={19} />}</span><span className="file-name"><strong>{item.name}</strong><small>{item.kind === "secure" ? (item.security?.isLocked ? "🔒 Nota Segura (Bloqueada)" : "🔓 Nota Segura (Desbloqueada)") : item.kind} · {item.size}</small></span><span className="file-tag"><Tag size={12} /> {item.cloudId ? "Sincronizado" : "Local"}</span><MoreHorizontal size={17} /></button>)}</div></section>
+            <div className="quick-actions">
+              <button onClick={() => setCreateSecureOpen(true)}>
+                <span className="action-icon gold"><ShieldCheck size={20} /></span>
+                <span><strong>Criar Nota Segura</strong><small>Cofre protegido por PIN ou senha</small></span>
+              </button>
+              <button onClick={() => fileInput.current?.click()}>
+                <span className="action-icon mint"><Upload size={19} /></span>
+                <span><strong>Importar qualquer arquivo</strong><small>PDF, Office, Markdown ou Samsung Notes</small></span>
+              </button>
+              <button onClick={() => newDocument("drawing")}>
+                <span className="action-icon violet"><PenLine size={19} /></span>
+                <span><strong>Desenhar livremente</strong><small>Caneta, toque ou mouse</small></span>
+              </button>
+              <button onClick={addPage}>
+                <span className="action-icon amber"><Plus size={20} /></span>
+                <span><strong>Criar uma página</strong><small>Texto, lista ou banco de dados</small></span>
+              </button>
+            </div>
+
+            <section className="section-block"><div className="section-heading"><div><h2>Seus documentos</h2><p>Clique para abrir no editor adequado</p></div><div className="view-controls"><button className={view === "grid" ? "active" : ""} onClick={() => setView("grid")}><Grid2X2 size={16} /></button><button className={view === "list" ? "active" : ""} onClick={() => setView("list")}><List size={17} /></button></div></div>
+              <div className={"recent-grid document-grid " + (view === "list" ? "list-view" : "")}>{documents.slice(0, 6).map((document, index) => <button className={`recent-card ${document.kind === "secure" ? "secure-card" : ""}`} key={document.id} onClick={() => setActiveDocument(document)}>
+                <div className={"card-art art-" + ((index % 3) + 1)}>
+                  <span>
+                    {document.kind === "spreadsheet" ? <FileSpreadsheet size={17} /> : document.kind === "drawing" ? <PenLine size={17} /> : document.kind === "secure" ? <Lock size={17} /> : <File size={17} />}
+                  </span>
+                  <div className="art-lines"><i /><i /><i /></div>
+                  {document.kind === "secure" && <span className="card-lock-badge">{document.security?.isLocked ? <Lock size={12} /> : <ShieldCheck size={12} />}</span>}
+                </div>
+                <div className="card-copy">
+                  <strong>{document.name}</strong>
+                  <p>
+                    {document.kind === "secure"
+                      ? (document.security?.isLocked ? "🔒 Protegida com " + (document.security.lockType === "pin" ? "PIN" : "Senha") : "🔓 Desbloqueada nesta sessão")
+                      : document.kind === "pdf"
+                      ? "Anotar sem alterar o original"
+                      : document.kind === "spreadsheet"
+                      ? "Células editáveis e exportação .xlsx"
+                      : document.kind === "samsung"
+                      ? "Conteúdo recuperado e editável"
+                      : "Conteúdo livre e conectado"}
+                  </p>
+                  <small>{document.cloudId ? "Na nuvem" : "Neste dispositivo"} · {document.size}</small>
+                </div>
+                <MoreHorizontal className="card-more" size={17} />
+              </button>)}</div>
+            </section>
+          </>
+        )}
+
+        {(activePage === "home" || activePage === "all_files" || activePage === "today") && (
+          <section className="section-block"><div className="section-heading"><div><h2>{activePage === "today" ? "Arquivos modificados hoje" : activePage === "all_files" ? "Todos os arquivos" : "Biblioteca"}</h2><p>{activePage === "home" ? "Tudo cabe aqui, sem se prender ao formato" : ""}</p></div><button className="text-button" onClick={() => setUploadOpen(true)}>Importar <ChevronRight size={15} /></button></div><div className="file-list">{documents
+            .filter(d => activePage === "today" ? (d.updatedAt && new Date(d.updatedAt).toLocaleDateString() === new Date().toLocaleDateString()) : true)
+            .slice(0, activePage === "home" ? 6 : undefined).map((item) => <button className="file-row" key={item.id} onClick={() => setActiveDocument(item)}><span className={"file-icon " + item.accent}>{item.kind === "spreadsheet" ? <FileSpreadsheet size={19} /> : item.kind === "drawing" ? <PenLine size={19} /> : item.kind === "secure" ? <Lock size={19} /> : <File size={19} />}</span><span className="file-name"><strong>{item.name}</strong><small>{item.kind === "secure" ? (item.security?.isLocked ? "🔒 Nota Segura (Bloqueada)" : "🔓 Nota Segura (Desbloqueada)") : item.kind} · {item.size}</small></span><span className="file-tag"><Tag size={12} /> {item.cloudId ? "Sincronizado" : "Local"}</span><MoreHorizontal size={17} /></button>)}</div></section>
+        )}
+        
+        {activePage === "connections" && (
+          <section className="section-block">
+            <div className="section-heading">
+              <div>
+                <h2>Suas conexões</h2>
+                <p>Grafo de conhecimento e back-links entre documentos estarão aqui.</p>
+              </div>
+            </div>
+            <div style={{ padding: "40px 0", textAlign: "center", color: "var(--foreground-muted)", border: "1px dashed var(--border-color)", borderRadius: 12 }}>
+              <Network size={32} style={{ opacity: 0.3, marginBottom: 12 }} />
+              <p>Nenhuma conexão visualizada no momento.</p>
+            </div>
+          </section>
+        )}
       </article></div>
       <button className="capture-button" onClick={() => setUploadOpen(true)}><Sparkles size={17} /><span>Captura rápida</span><kbd>N</kbd></button>
     </section>
