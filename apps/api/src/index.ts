@@ -166,7 +166,6 @@ app.group("/auth", (app) =>
       }
       return { user: users[0] };
     })
-    })
     .patch("/me", async ({ userId, body, set }) => {
       if (!userId) {
         set.status = 401;
