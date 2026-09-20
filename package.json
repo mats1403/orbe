@@ -7,9 +7,12 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:web": "cd apps/web && bun run dev",
+    "dev:client": "cd apps/client && bun run dev",
     "dev:api": "cd apps/api && bun run dev",
-    "dev": "bun run dev:web & bun run dev:api"
+    "dev:desktop": "cd apps/desktop && bunx tauri dev",
+    "dev:android": "cd apps/desktop && bunx tauri android dev",
+    "dev:ios": "cd apps/desktop && bunx tauri ios dev",
+    "dev": "bunx concurrently \"bun run dev:api\" \"bun run dev:desktop\""
   },
   "devDependencies": {
     "@tauri-apps/api": "^2.11.1",

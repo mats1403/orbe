@@ -4,11 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --watch src/index.ts",
+    "dev": "bun --env-file=../../.env --watch src/index.ts",
     "build": "bun build src/index.ts --target=bun --outfile=dist/index.js",
     "start": "bun dist/index.js",
     "start:prod": "bun dist/index.js",
-    "seed:local": "bun src/seed-local.ts"
+    "seed:local": "bun --env-file=../../.env src/seed-local.ts"
   },
   "dependencies": {
     "@elysiajs/cookie": "latest",

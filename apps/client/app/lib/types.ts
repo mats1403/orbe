@@ -45,4 +45,4 @@ export type CloudPage = {
   updated_at: string;
 };
 
-export type SessionUser = { id: string; email: string; display_name?: string; role?: "admin" | "user" };
+export type SessionUser = { id: string; email: string; display_name?: string; role?: "admin" | "user"; vault_path?: string | null; last_opened_files?: string | null };

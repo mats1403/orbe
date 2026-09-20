@@ -110,7 +110,7 @@ app.group("/auth", (app) =>
           username: input.username,
           password_hash: hash,
           display_name: input.username,
-        }).returning({ id: schema.users.id, email: schema.users.email, username: schema.users.username, display_name: schema.users.display_name, role: schema.users.role });
+        }).returning({ id: schema.users.id, email: schema.users.email, username: schema.users.username, display_name: schema.users.display_name, role: schema.users.role, vault_path: schema.users.vault_path, last_opened_files: schema.users.last_opened_files });
         const user = result[0];
         orbe_session.set({
           value: await tokenFor(user.id),
@@ -152,19 +152,33 @@ app.group("/auth", (app) =>
         path: "/",
         maxAge: 7 * 24 * 60 * 60,
       });
-      return { user: { id: user.id, email: user.email, username: user.username, display_name: user.display_name, role: user.role } };
+      return { user: { id: user.id, email: user.email, username: user.username, display_name: user.display_name, role: user.role, vault_path: user.vault_path, last_opened_files: user.last_opened_files } };
     }, { body: loginSchema })
     .get("/me", async ({ userId, set }) => {
       if (!userId) {
         set.status = 401;
         return { message: "Não autenticado" };
       }
-      const users = await db.select({ id: schema.users.id, email: schema.users.email, username: schema.users.username, display_name: schema.users.display_name, role: schema.users.role }).from(schema.users).where(eq(schema.users.id, userId));
+      const users = await db.select({ id: schema.users.id, email: schema.users.email, username: schema.users.username, display_name: schema.users.display_name, role: schema.users.role, vault_path: schema.users.vault_path, last_opened_files: schema.users.last_opened_files }).from(schema.users).where(eq(schema.users.id, userId));
       if (!users[0]) {
         set.status = 401;
         return { message: "Sessão inválida" };
       }
       return { user: users[0] };
+    })
+    })
+    .patch("/me", async ({ userId, body, set }) => {
+      if (!userId) {
+        set.status = 401;
+        return { message: "Não autenticado" };
+      }
+      const input = body as any;
+      const updates: any = {};
+      if (input.vault_path !== undefined) updates.vault_path = input.vault_path;
+      if (input.last_opened_files !== undefined) updates.last_opened_files = input.last_opened_files;
+      
+      const result = await db.update(schema.users).set(updates).where(eq(schema.users.id, userId)).returning({ id: schema.users.id, email: schema.users.email, username: schema.users.username, display_name: schema.users.display_name, role: schema.users.role, vault_path: schema.users.vault_path, last_opened_files: schema.users.last_opened_files });
+      return { user: result[0] };
     })
     .post("/logout", async ({ cookie: { orbe_session } }) => {
       orbe_session.remove();
@@ -172,106 +186,7 @@ app.group("/auth", (app) =>
     })
 );
 
-// API Routes
-app.group("/api", (app) =>
-  app
-    .onBeforeHandle(({ userId, set }) => {
-      if (!userId) {
-        set.status = 401;
-        return { message: "Não autenticado" };
-      }
-    })
-    .get("/pages", async ({ userId }) => {
-      return await db.select({
-        id: schema.pages.id,
-        parent_id: schema.pages.parent_id,
-        title: schema.pages.title,
-        icon: schema.pages.icon,
-        content: schema.pages.content,
-        is_favorite: schema.pages.is_favorite,
-        updated_at: schema.pages.updated_at,
-      }).from(schema.pages).where(eq(schema.pages.owner_id, userId)).orderBy(desc(schema.pages.updated_at));
-    })
-    .post("/pages", async ({ body, userId, set }) => {
-      const input = body as any;
-      const result = await db.insert(schema.pages).values({
-        owner_id: userId,
-        parent_id: input.parentId ?? null,
-        title: input.title ?? "Página sem título",
-        icon: input.icon ?? null,
-        content: JSON.stringify(input.content ?? []),
-      }).returning({
-        id: schema.pages.id,
-        parent_id: schema.pages.parent_id,
-        title: schema.pages.title,
-        icon: schema.pages.icon,
-        content: schema.pages.content,
-        is_favorite: schema.pages.is_favorite,
-        updated_at: schema.pages.updated_at,
-      });
-      set.status = 201;
-      return result[0];
-    })
-    .patch("/pages/:id", async ({ params: { id }, body, userId, set }) => {
-      const input = body as any;
-      const updates: any = { updated_at: new Date() };
-      if (input.title !== undefined) updates.title = input.title;
-      if (input.content !== undefined) updates.content = JSON.stringify(input.content);
-      if (input.isFavorite !== undefined) updates.is_favorite = input.isFavorite;
-
-      const result = await db.update(schema.pages)
-        .set(updates)
-        .where(and(eq(schema.pages.id, id), eq(schema.pages.owner_id, userId)))
-        .returning({
-          id: schema.pages.id,
-          parent_id: schema.pages.parent_id,
-          title: schema.pages.title,
-          icon: schema.pages.icon,
-          content: schema.pages.content,
-          is_favorite: schema.pages.is_favorite,
-          updated_at: schema.pages.updated_at,
-        });
-      
-      if (!result.length) {
-        set.status = 404;
-        return { message: "Página não encontrada." };
-      }
-      return result[0];
-    })
-    .delete("/pages/:id", async ({ params: { id }, userId, set }) => {
-      const result = await db.delete(schema.pages).where(and(eq(schema.pages.id, id), eq(schema.pages.owner_id, userId))).returning({ id: schema.pages.id });
-      if (!result.length) {
-        set.status = 404;
-        return { message: "Página não encontrada." };
-      }
-      set.status = 204;
-    })
-    .get("/files", async ({ userId }) => {
-      return await db.select({
-        id: schema.files.id,
-        original_name: schema.files.original_name,
-        mime_type: schema.files.mime_type,
-        size_bytes: schema.files.size_bytes,
-        created_at: schema.files.created_at,
-      }).from(schema.files).where(eq(schema.files.owner_id, userId)).orderBy(desc(schema.files.created_at));
-    })
-    .get("/files/:id", async ({ params: { id }, userId, set }) => {
-      const files = await db.select({
-        original_name: schema.files.original_name,
-        storage_name: schema.files.storage_name,
-        mime_type: schema.files.mime_type,
-      }).from(schema.files).where(and(eq(schema.files.id, id), eq(schema.files.owner_id, userId)));
-      const file = files[0];
-      if (!file) {
-        set.status = 404;
-        return { message: "Arquivo não encontrado." };
-      }
-      set.headers["Content-Type"] = file.mime_type;
-      set.headers["Content-Disposition"] = "inline; filename*=UTF-8''" + encodeURIComponent(file.original_name);
-      set.headers["X-Content-Type-Options"] = "nosniff";
-      return Bun.file(join(env.UPLOAD_DIR, file.storage_name));
-    })
-);
+// API Routes removed because app is fully local-first
 
 app.listen(env.PORT, () => {
   console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);

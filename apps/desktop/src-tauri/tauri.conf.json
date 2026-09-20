@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.tauri.dev",
   "build": {
-    "frontendDist": "../../apps/web/dist",
+    "frontendDist": "../../apps/client/dist",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "bun run --cwd ../web dev",
-    "beforeBuildCommand": "bun run --cwd ../web build"
+    "beforeDevCommand": "bun run --cwd ../client dev",
+    "beforeBuildCommand": "bun run --cwd ../client build"
   },
   "app": {
     "windows": [

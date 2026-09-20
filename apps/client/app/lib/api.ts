@@ -20,23 +20,24 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export type SessionUser = { id: string; email: string; username: string; display_name: string; role: string };
 
 export const remoteApi = {
+  getVaults: (): string[] => [],
+  setActiveVault: (path: string) => {},
+  setupVault: () => Promise.resolve(null as string | null),
+  getVaultPath: () => null as string | null,
   health: () => request<{ status: string }>("/health"),
   me: () => request<{ user: SessionUser }>("/auth/me"),
+  patchMe: (vault_path?: string | null, last_opened_files?: string | null) => request<{ user: SessionUser }>("/auth/me", { method: "PATCH", body: JSON.stringify({ vault_path, last_opened_files }) }),
   login: (loginStr: string, password: string) => request<{ user: SessionUser }>("/auth/login", { method: "POST", body: JSON.stringify({ login: loginStr, password }) }),
   register: (email: string, username: string, password: string) => request<{ user: SessionUser }>("/auth/register", { method: "POST", body: JSON.stringify({ email, username, password }) }),
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
-  pages: () => request<CloudPage[]>("/api/pages"),
-  createPage: (input: { title: string; icon?: string; content?: CloudPage["content"] }) =>
-    request<CloudPage>("/api/pages", { method: "POST", body: JSON.stringify(input) }),
-  updatePage: (id: string, input: { title?: string; content?: CloudPage["content"]; isFavorite?: boolean }) =>
-    request<CloudPage>("/api/pages/" + id, { method: "PATCH", body: JSON.stringify(input) }),
-  files: () => request<Array<{ id: string; original_name: string; mime_type: string; size_bytes: number; created_at: string }>>("/api/files"),
-  fileUrl: (id: string) => API_URL + "/api/files/" + encodeURIComponent(id),
-  upload: async (file: File) => {
-    const form = new FormData();
-    form.append("file", file);
-    return request<{ id: string; original_name: string; mime_type: string; size_bytes: number }>("/api/files", { method: "POST", body: form });
-  },
+  // Mock implementations for local-first fallbacks
+  pages: () => Promise.resolve([]),
+  createPage: () => Promise.reject(new Error("Local only")),
+  updatePage: () => Promise.reject(new Error("Local only")),
+  deletePage: () => Promise.reject(new Error("Local only")),
+  files: () => Promise.resolve([]),
+  fileUrl: () => "",
+  upload: () => Promise.reject(new Error("Local only")),
 };
 
 // Proxy para direcionar as chamadas para o motor correto (Local-First no Desktop, Remote na Web)
