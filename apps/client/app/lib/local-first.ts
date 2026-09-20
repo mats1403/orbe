@@ -81,31 +81,19 @@ export const localApi = {
             id: relId,
             parent_id: parentId,
             title: entry.name,
-            icon: "📁",
+            icon: "folder",
             content: [],
             is_favorite: false,
             updated_at: fileStat.mtime ? new Date(fileStat.mtime).toISOString() : new Date().toISOString()
           });
           await scanDir(fullPath, relId);
         } else if (entry.name.endsWith(".md")) {
-          let content: any = "";
-          try {
-            const raw = await readTextFile(fullPath);
-            try {
-              content = JSON.parse(raw);
-            } catch {
-              content = raw;
-            }
-          } catch {
-            // fallback
-          }
-
           pages.push({
             id: relId,
             parent_id: parentId,
             title: stripExt(entry.name),
-            icon: "○",
-            content: content,
+            icon: "file",
+            content: [],
             is_favorite: false,
             updated_at: fileStat.mtime ? new Date(fileStat.mtime).toISOString() : new Date().toISOString()
           });
@@ -122,13 +110,29 @@ export const localApi = {
     return pages;
   },
 
+  getPageContent: async (id: string): Promise<string> => {
+    const vault = localApi.getVaultPath();
+    if (!vault) return "DEBUG: Vault não encontrado.";
+    const { join } = await import("@tauri-apps/api/path");
+    const { readTextFile, exists } = await import("@tauri-apps/plugin-fs");
+    try {
+      const fullPath = await join(vault, id);
+      if (!(await exists(fullPath))) {
+        return `DEBUG: Arquivo não existe no caminho: ${fullPath}`;
+      }
+      return await readTextFile(fullPath);
+    } catch (e) {
+      return `DEBUG: Erro ao ler arquivo: ${String(e)}`;
+    }
+  },
+
   createPage: async (input: { title: string; icon?: string; content?: CloudPage["content"]; parentId?: string | null }): Promise<CloudPage> => {
     const vault = localApi.getVaultPath();
     if (!vault) throw new Error("Cofre não configurado");
 
     const safeTitle = (input.title || "Sem título").replace(/[\\/:*?"<>|]/g, "");
     const parentPath = input.parentId ? await join(vault, input.parentId) : vault;
-    const isFolder = input.icon === "📁";
+    const isFolder = input.icon === "folder";
     
     let fullPath = "";
     let relId = "";

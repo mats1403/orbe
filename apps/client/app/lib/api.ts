@@ -32,6 +32,7 @@ export const remoteApi = {
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
   // Mock implementations for local-first fallbacks
   pages: () => Promise.resolve([]),
+  getPageContent: (id: string) => Promise.resolve(""),
   createPage: () => Promise.reject(new Error("Local only")),
   updatePage: () => Promise.reject(new Error("Local only")),
   deletePage: () => Promise.reject(new Error("Local only")),

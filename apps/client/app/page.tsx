@@ -5,10 +5,11 @@ import {
   FileSpreadsheet, Grid2X2, HardDrive, Inbox, Link2, List, Lock, LogOut, Menu,
   MessageSquareText, MoreHorizontal, Network, PanelLeftClose, PenLine, Plus,
   Search, Settings, Share2, ShieldCheck, Sparkles, Star, Tag, Upload, UserRound, X,
-  Eye, EyeOff
+  Eye, EyeOff, Folder, FileText, CloudOff
 } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { EditorWorkspace } from "./components/EditorWorkspace";
+import { MarkdownVisualEditor } from "./components/MarkdownVisualEditor";
 import { SecureSetupModal } from "./components/SecureSetupModal";
 import { api } from "./lib/api";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -57,6 +58,7 @@ export default function Home() {
   const [contextMenuPage, setContextMenuPage] = useState<string | null>(null);
   const [documents, setDocuments] = useState<OrbeDocument[]>([]);
   const [activeDocument, setActiveDocument] = useState<OrbeDocument | null>(null);
+  const [isLoadingNote, setIsLoadingNote] = useState(false);
   const [lastOpenedState, setLastOpenedState] = useState<{ activePage?: string; activeDocumentId?: string } | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -174,7 +176,7 @@ export default function Home() {
   }, [vaultPath]);
 
   useEffect(() => {
-    if (!vaultPath) return;
+    if (!vaultPath || isLoadingNote) return;
 
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     setSyncStatus("saving");
@@ -241,11 +243,26 @@ export default function Home() {
 
   function togglePage(id: string) { setPages(current => current.map(p => p.id === id ? { ...p, isOpen: !p.isOpen } : p)); }
 
-  function openPage(page: PageItem) { 
+  async function openPage(page: PageItem) { 
     setActivePage(page.id); 
     setTitle(page.title); 
-    setNote(Array.isArray(page.content) ? JSON.stringify(page.content, null, 2) : (page.content || "")); 
+    setNote(""); 
     setMobileOpen(false); 
+    
+    setIsLoadingNote(true);
+    try {
+      const rawContent = await api.getPageContent(page.id);
+      let parsedContent = rawContent;
+      try { parsedContent = JSON.parse(rawContent); } catch {}
+      
+      const newNote = Array.isArray(parsedContent) ? JSON.stringify(parsedContent, null, 2) : (parsedContent || "");
+      setNote(newNote);
+      setPages(current => current.map(p => p.id === page.id ? { ...p, content: parsedContent } : p));
+    } catch (e) {
+      setNote("");
+    } finally {
+      setIsLoadingNote(false);
+    }
   }
   async function addPage(parentId: string | null = null) {
     try {
@@ -419,9 +436,9 @@ export default function Home() {
       </div>
       <div className="page-tree">{(["favorites", "private", "shared"] as const).map((group) => <SideGroup key={group} title={{ favorites: "FAVORITOS", private: "PRIVADO", shared: "COMPARTILHADO" }[group]}>
         {function renderTree(parentId: string | null = null, depth = 0) {
-          const nodes = pages.filter(p => (p.parentId || null) === parentId && p.group === group);
+          const nodes = pages.filter(p => ((p as any).parent_id || null) === parentId && p.group === group);
           return nodes.map(page => {
-            const hasChildren = pages.some(p => p.parentId === page.id && p.group === group);
+            const hasChildren = pages.some(p => (p as any).parent_id === page.id && p.group === group);
             return (
               <div key={page.id}>
                 <div 
@@ -454,8 +471,17 @@ export default function Home() {
                   ) : (
                     <span style={{ width: 24 }} />
                   )}
-                  <button style={{ flex: 1 }} className={"page-row " + (activePage === page.id ? "selected" : "") + (draggedId === page.id ? " dragging" : "")} onClick={() => openPage(page)}>
-                    <span className="page-emoji">{page.icon || (hasChildren ? "📁" : "○")}</span><span>{page.title}</span>{group === "shared" && <span className="avatar-mini">M</span>}
+                  <button style={{ flex: 1 }} className={"page-row " + (activePage === page.id ? "selected" : "") + (draggedId === page.id ? " dragging" : "")} onClick={() => {
+                      if (page.icon === 'folder') {
+                        togglePage(page.id);
+                      } else {
+                        openPage(page);
+                      }
+                  }}>
+                    <span className="page-emoji" style={{ display: 'flex', alignItems: 'center', opacity: 0.7, marginRight: 6 }}>
+                      {page.icon === 'folder' ? <Folder size={15}/> : page.icon === 'file' ? <FileText size={15}/> : (hasChildren ? <Folder size={15}/> : <FileText size={15}/>)}
+                    </span>
+                    <span>{page.title}</span>{group === "shared" && <span className="avatar-mini">M</span>}
                   </button>
                   
                   {contextMenuPage === page.id && (
@@ -495,8 +521,23 @@ export default function Home() {
                 </span>
                 <button onClick={() => openSpecial("home", "Início")}><X size={14} /> Fechar</button>
               </div>
-              <input className="page-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Título da página" style={{ fontSize: 42, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 16 }} />
-              <textarea className="page-intro" value={note} onChange={(event) => setNote(event.target.value)} rows={10} placeholder="Escreva aqui (suporta Markdown)..." style={{ minHeight: 400, background: '#fff', borderRadius: 20, padding: 24, boxShadow: '0 4px 20px rgba(0,0,0,0.03)', border: '1px solid var(--line)' }} />
+              <input className="page-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Título da página" style={{ fontSize: 42, fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 16, background: 'transparent', border: 'none', outline: 'none', width: '100%', color: 'inherit' }} />
+              <div className="seamless-editor-container" style={{ marginTop: 16 }}>
+                <style>{`
+                  .seamless-editor-container .visual-markdown-editor { min-height: 400px; }
+                  .seamless-editor-container .editor-ribbon { background: transparent; border-bottom: 1px solid rgba(0,0,0,0.05); margin-bottom: 16px; border-radius: 12px; }
+                  .seamless-editor-container .visual-markdown-scroll { overflow-y: visible !important; background: transparent !important; }
+                  .seamless-editor-container .visual-markdown-scroll .tiptap { padding: 0 !important; width: 100% !important; min-height: auto !important; }
+                `}</style>
+                {isLoadingNote ? (
+                  <div style={{ color: 'var(--muted)' }}>Carregando...</div>
+                ) : (
+                  <MarkdownVisualEditor 
+                    value={note} 
+                    onChange={setNote} 
+                  />
+                )}
+              </div>
             </>
           ) : null}
 
